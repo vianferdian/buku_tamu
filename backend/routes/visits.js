@@ -43,6 +43,10 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ message: 'Semua field wajib yang bertanda bintang harus diisi.' });
   }
 
+  if (!/^\d+$/.test(visitorPhone)) {
+    return res.status(400).json({ message: 'Nomor WhatsApp harus berupa angka saja.' });
+  }
+
   try {
     // Generate Visit Code: T-YYYYMMDD-XXXX
     const startOfToday = new Date();

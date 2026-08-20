@@ -97,6 +97,7 @@ export default function GuestForm() {
         const selectedType = visitorTypes.find(t => t.id === parseInt(formData.visitorTypeId));
         const isParent = selectedType?.name.toLowerCase().includes('orang tua') || selectedType?.name.toLowerCase().includes('wali');
         if (!formData.visitorName || !formData.visitorPhone) return false;
+        if (!/^\d+$/.test(formData.visitorPhone)) return false;
         if (isParent) {
           if (!formData.studentName || !formData.studentClass) return false;
         } else {
@@ -164,11 +165,13 @@ export default function GuestForm() {
   // Filter Employees
   const filteredEmployees = employees.filter(emp => {
     const matchDept = formData.destinationId ? emp.departmentId === parseInt(formData.destinationId) : true;
-    const matchText = searchEmployee
-      ? emp.name.toLowerCase().includes(searchEmployee.toLowerCase()) ||
-        emp.position.toLowerCase().includes(searchEmployee.toLowerCase()) ||
-        (emp.expertise && emp.expertise.toLowerCase().includes(searchEmployee.toLowerCase()))
-      : true;
+    if (!searchEmployee.trim()) {
+      return false;
+    }
+    const matchText =
+      emp.name.toLowerCase().includes(searchEmployee.toLowerCase()) ||
+      emp.position.toLowerCase().includes(searchEmployee.toLowerCase()) ||
+      (emp.expertise && emp.expertise.toLowerCase().includes(searchEmployee.toLowerCase()));
     return matchDept && matchText;
   });
 
@@ -286,7 +289,10 @@ export default function GuestForm() {
                       type="tel"
                       placeholder="e.g. 081234567890"
                       value={formData.visitorPhone}
-                      onChange={(e) => setFormData(p => ({ ...p, visitorPhone: e.target.value }))}
+                      onChange={(e) => {
+                        const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                        setFormData(p => ({ ...p, visitorPhone: numericValue }));
+                      }}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-navy focus:border-navy focus:bg-white outline-none transition font-medium text-sm text-navy"
                     />
                   </div>
@@ -403,7 +409,11 @@ export default function GuestForm() {
                     </div>
 
                     <div className="flex flex-col space-y-1.5 max-h-[160px] overflow-y-auto pr-1 pt-1.5">
-                      {filteredEmployees.length > 0 ? (
+                      {!searchEmployee.trim() ? (
+                        <div className="text-center text-xs text-textsec py-4 bg-slate-50 border border-dashed rounded-lg">
+                          Ketik nama pegawai / guru untuk mencari...
+                        </div>
+                      ) : filteredEmployees.length > 0 ? (
                         filteredEmployees.map(emp => (
                           <button
                             key={emp.id}
