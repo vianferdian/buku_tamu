@@ -10,7 +10,7 @@ import {
 import { 
   LayoutDashboard, Users, UserCog, Settings, FolderTree, FileSpreadsheet, 
   HelpCircle, UserCheck, LogOut, Plus, Edit, Trash2, CheckCircle, XCircle, 
-  FileText, ShieldAlert, Key, Calendar
+  FileText, ShieldAlert, Key, Calendar, RefreshCw
 } from 'lucide-react';
 import { 
   deptApi, employeeApi, visitorTypeApi, purposeApi, userApi, settingApi, visitApi, reportApi 
@@ -45,6 +45,10 @@ export default function AdminPortal() {
   const [waTemplate, setWaTemplate] = useState('');
   const [visitCodePattern, setVisitCodePattern] = useState('T-{YYYY}{MM}{DD}-{SEQ}');
   const [importingExcel, setImportingExcel] = useState(false);
+  const [bankDataApiUrl, setBankDataApiUrl] = useState('');
+  const [bankDataClientId, setBankDataClientId] = useState('');
+  const [bankDataClientSecret, setBankDataClientSecret] = useState('');
+  const [syncingEmployees, setSyncingEmployees] = useState(false);
 
   // Pagination states
   const [visitsPage, setVisitsPage] = useState(1);
@@ -173,6 +177,30 @@ export default function AdminPortal() {
     } catch (err) {
       console.error(err);
       setVisitCodePattern('T-{YYYY}{MM}{DD}-{SEQ}');
+    }
+
+    try {
+      const resUrl = await settingApi.get('bank_data_api_url');
+      setBankDataApiUrl(resUrl.data.value);
+    } catch (err) {
+      console.error(err);
+      setBankDataApiUrl('https://data.vianferdian.web.id/api/v1');
+    }
+
+    try {
+      const resId = await settingApi.get('bank_data_client_id');
+      setBankDataClientId(resId.data.value);
+    } catch (err) {
+      console.error(err);
+      setBankDataClientId('BUKU_TAMU_FHOB');
+    }
+
+    try {
+      const resSecret = await settingApi.get('bank_data_client_secret');
+      setBankDataClientSecret(resSecret.data.value);
+    } catch (err) {
+      console.error(err);
+      setBankDataClientSecret('0bgDccJDHpt6sOTS4u31SM84NZ78jFIQ');
     }
   };
 
@@ -477,10 +505,46 @@ export default function AdminPortal() {
     try {
       await settingApi.update('whatsapp_template', waTemplate);
       await settingApi.update('visit_code_pattern', visitCodePattern);
+      await settingApi.update('bank_data_api_url', bankDataApiUrl);
+      await settingApi.update('bank_data_client_id', bankDataClientId);
+      await settingApi.update('bank_data_client_secret', bankDataClientSecret);
       triggerSuccess('Pengaturan sistem berhasil diperbarui.');
     } catch (err) {
       console.error(err);
       triggerError('Gagal memperbarui pengaturan.');
+    }
+  };
+
+  const handleSyncEmployees = async () => {
+    Swal.fire({
+      title: 'Sinkronisasi Data...',
+      text: 'Menarik data guru dan pegawai dari API Bank Data, mohon tunggu.',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    setSyncingEmployees(true);
+    try {
+      const res = await employeeApi.syncEmployees();
+      Swal.fire({
+        title: 'Sukses',
+        text: res.data.message || 'Sinkronisasi berhasil diselesaikan.',
+        icon: 'success',
+        confirmButtonColor: '#0F2744'
+      });
+      fetchEmployees();
+    } catch (err) {
+      console.error(err);
+      Swal.fire({
+        title: 'Gagal',
+        text: err.response?.data?.message || 'Gagal menyinkronkan data guru & pegawai.',
+        icon: 'error',
+        confirmButtonColor: '#0F2744'
+      });
+    } finally {
+      setSyncingEmployees(false);
     }
   };
 
@@ -640,126 +704,111 @@ export default function AdminPortal() {
   return (
     <div className="min-h-screen bg-bgmain flex flex-col md:flex-row">
       {/* -------------------- SIDEBAR MENU -------------------- */}
-      <aside className="w-full md:w-64 bg-navy text-white flex flex-col shrink-0">
-        <div className="p-6 border-b border-white/10 flex items-center space-x-3">
-          <img src={logoImg} alt="Logo" className="w-9 h-9 object-contain bg-white p-0.5 rounded-lg" />
+      <aside className="w-full md:w-56 bg-[#0B1F3A] text-white flex flex-col shrink-0">
+        {/* Logo */}
+        <div className="px-5 py-5 flex items-center space-x-2.5">
+          <img src={logoImg} alt="Logo" className="w-7 h-7 object-contain bg-white/90 p-0.5 rounded-md" />
           <div>
-            <h1 className="font-bold text-sm leading-none">SMKN 1 CIREBON</h1>
-            <span className="text-[10px] text-slate-300 font-semibold tracking-wider">ADMIN CONTROL</span>
+            <h1 className="font-bold text-[11px] leading-none tracking-wide">SMKN 1 CIREBON</h1>
+            <span className="text-[9px] text-slate-400 font-medium tracking-widest">ADMIN PANEL</span>
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 text-slate-300 text-xs font-bold">
-          <button
-            onClick={() => setActiveMenu('dashboard')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'dashboard' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Dashboard Stats</span>
-          </button>
+        <nav className="flex-1 px-3 pb-4 space-y-0.5 text-[11px] font-semibold overflow-y-auto">
+          {/* Group: Main */}
+          <div className="pt-2 pb-1 px-2 text-[9px] text-white/30 tracking-widest uppercase font-bold">Menu Utama</div>
 
-          <button
-            onClick={() => setActiveMenu('visits')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'visits' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Data Kunjungan</span>
-          </button>
+          {[
+            { key: 'dashboard', icon: <LayoutDashboard className="w-3.5 h-3.5" />, label: 'Dashboard' },
+            { key: 'visits',    icon: <FileSpreadsheet className="w-3.5 h-3.5" />, label: 'Data Kunjungan' },
+          ].map(({ key, icon, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveMenu(key)}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md transition-all ${
+                activeMenu === key
+                  ? 'bg-white/10 text-white'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              {icon}
+              <span>{label}</span>
+              {activeMenu === key && <span className="ml-auto w-1 h-4 rounded-full bg-sky-400" />}
+            </button>
+          ))}
 
-          <div className="pt-4 pb-1 text-[9px] text-white/40 tracking-wider uppercase font-extrabold px-4">Master Data</div>
-          
-          <button
-            onClick={() => setActiveMenu('departments')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'departments' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <FolderTree className="w-4 h-4" />
-            <span>Bagian / Unit</span>
-          </button>
+          {/* Group: Master Data */}
+          <div className="pt-4 pb-1 px-2 text-[9px] text-white/30 tracking-widest uppercase font-bold">Master Data</div>
 
-          <button
-            onClick={() => setActiveMenu('employees')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'employees' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Guru & Pegawai</span>
-          </button>
+          {[
+            { key: 'departments',  icon: <FolderTree className="w-3.5 h-3.5" />,     label: 'Bagian / Unit' },
+            { key: 'employees',   icon: <Users className="w-3.5 h-3.5" />,          label: 'Guru & Pegawai' },
+            { key: 'visitorTypes',icon: <UserCheck className="w-3.5 h-3.5" />,      label: 'Jenis Kunjungan' },
+            { key: 'purposes',    icon: <HelpCircle className="w-3.5 h-3.5" />,     label: 'Keperluan Tamu' },
+            { key: 'users',       icon: <UserCog className="w-3.5 h-3.5" />,        label: 'Pengguna' },
+          ].map(({ key, icon, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveMenu(key)}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md transition-all ${
+                activeMenu === key
+                  ? 'bg-white/10 text-white'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              {icon}
+              <span>{label}</span>
+              {activeMenu === key && <span className="ml-auto w-1 h-4 rounded-full bg-sky-400" />}
+            </button>
+          ))}
 
-          <button
-            onClick={() => setActiveMenu('visitorTypes')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'visitorTypes' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <FolderTree className="w-4 h-4" />
-            <span>Jenis Kunjungan</span>
-          </button>
+          {/* Group: System */}
+          <div className="pt-4 pb-1 px-2 text-[9px] text-white/30 tracking-widest uppercase font-bold">Sistem</div>
 
-          <button
-            onClick={() => setActiveMenu('purposes')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'purposes' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <HelpCircle className="w-4 h-4" />
-            <span>Keperluan Tamu</span>
-          </button>
-
-          <button
-            onClick={() => setActiveMenu('users')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'users' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <UserCog className="w-4 h-4" />
-            <span>Pengguna Sistem</span>
-          </button>
-
-          <div className="pt-4 pb-1 text-[9px] text-white/40 tracking-wider uppercase font-extrabold px-4">Pengaturan</div>
-
-          <button
-            onClick={() => setActiveMenu('settings')}
-            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition ${
-              activeMenu === 'settings' ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Template WhatsApp</span>
-          </button>
+          {[
+            { key: 'settings', icon: <Settings className="w-3.5 h-3.5" />, label: 'Pengaturan' },
+          ].map(({ key, icon, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveMenu(key)}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md transition-all ${
+                activeMenu === key
+                  ? 'bg-white/10 text-white'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              {icon}
+              <span>{label}</span>
+              {activeMenu === key && <span className="ml-auto w-1 h-4 rounded-full bg-sky-400" />}
+            </button>
+          ))}
         </nav>
+
+        {/* Bottom user badge */}
+        <div className="px-4 py-3 border-t border-white/5 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="w-6 h-6 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center text-[10px] font-bold">
+              {adminUser?.name?.charAt(0)?.toUpperCase()}
+            </div>
+            <span className="text-[10px] text-slate-300 font-medium truncate max-w-[90px]">{adminUser?.name}</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-1.5 text-slate-400 hover:text-rose-400 transition rounded-md"
+            title="Logout"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </aside>
 
-      <main className="flex-1 p-6 sm:p-8 flex flex-col justify-between overflow-x-hidden relative">
+      <main className="flex-1 p-5 sm:p-7 flex flex-col justify-between overflow-x-hidden relative">
         <div>
           {/* Header */}
           <div className="flex justify-between items-center pb-4 border-b border-bordergray gap-4">
             <div>
-              <h2 className="text-xl font-extrabold text-navy uppercase tracking-tight">{getMenuTitle()}</h2>
-              <p className="text-[10px] text-textsec mt-0.5">SMK Negeri 1 Cirebon Digital Guest Book</p>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              {/* User Profile & Logout (Top Right) */}
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-xs font-bold text-navy leading-none">{adminUser?.name}</p>
-                  <span className="text-[9px] font-semibold text-textsec">Administrator</span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-lg transition"
-                  title="Logout"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <h2 className="text-base font-extrabold text-navy tracking-tight">{getMenuTitle()}</h2>
+              <p className="text-[10px] text-textsec mt-0.5">SMK Negeri 1 Cirebon — Buku Tamu Digital</p>
             </div>
           </div>
 
@@ -1199,6 +1248,16 @@ export default function AdminPortal() {
                   </label>
 
                   <button
+                    onClick={handleSyncEmployees}
+                    disabled={syncingEmployees}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition flex items-center space-x-1"
+                    title="Sinkronisasi seluruh data guru & pegawai dari API Bank Data"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingEmployees ? 'animate-spin' : ''}`} />
+                    <span>{syncingEmployees ? 'Menyinkronkan...' : 'Sinkronisasi API'}</span>
+                  </button>
+
+                  <button
                     onClick={() => openModal('employees', 'create')}
                     className="px-3.5 py-1.5 bg-navy hover:bg-navy-secondary text-white text-[10px] font-bold rounded-lg flex items-center space-x-1 transition"
                   >
@@ -1501,74 +1560,131 @@ export default function AdminPortal() {
 
           {/* ==================== 8. PANEL: SYSTEM SETTINGS ==================== */}
           {activeMenu === 'settings' && (
-            <div className="space-y-5 mt-6 max-w-xl fade-in">
-              <div className="bg-white p-5 rounded-xl border border-bordergray shadow-sm">
-                <h4 className="font-extrabold text-navy text-xs border-b pb-3 mb-4">Template Pesan WhatsApp Otomatis</h4>
-                
-                <form onSubmit={handleUpdateSettings} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-navy">Format Pesan WhatsApp</label>
-                    <textarea
-                      rows="6"
-                      value={waTemplate}
-                      onChange={(e) => setWaTemplate(e.target.value)}
-                      className="w-full border border-bordergray p-3 rounded-lg outline-none focus:border-navy text-xs font-medium resize-none leading-relaxed"
-                    />
-                  </div>
+            <div className="mt-6 max-w-2xl space-y-4 fade-in">
 
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-[10px] leading-relaxed font-bold text-textsec space-y-1">
-                    <span className="text-navy flex items-center space-x-1">
-                      <Key className="w-3 h-3" />
-                      <span>Variabel yang dapat digunakan:</span>
-                    </span>
-                    <div className="grid grid-cols-2 gap-x-2">
-                      <div><code>{'{waktu}'}</code> (Pagi/Siang/Sore/Malam)</div>
-                      <div><code>{'{nama_pegawai}'}</code></div>
-                      <div><code>{'{nama_tamu}'}</code></div>
-                      <div><code>{'{instansi}'}</code></div>
-                      <div><code>{'{jenis_kunjungan}'}</code></div>
-                      <div><code>{'{keperluan}'}</code></div>
-                      <div><code>{'{jam_kunjungan}'}</code></div>
+              {/* Card 1: WhatsApp Template */}
+              <div className="bg-white rounded-xl border border-bordergray shadow-sm overflow-hidden">
+                <div className="flex items-center space-x-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+                  <div className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <FileText className="w-3 h-3" />
+                  </div>
+                  <h4 className="text-xs font-bold text-navy">Template Pesan WhatsApp</h4>
+                </div>
+                <div className="p-5">
+                  <form onSubmit={handleUpdateSettings} className="space-y-4" id="form-settings">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-textsec uppercase tracking-wider">Format Pesan</label>
+                      <textarea
+                        rows="5"
+                        value={waTemplate}
+                        onChange={(e) => setWaTemplate(e.target.value)}
+                        className="w-full border border-bordergray p-3 rounded-lg outline-none focus:border-navy text-xs font-medium resize-none leading-relaxed"
+                      />
                     </div>
-                  </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['{waktu}','{nama_pegawai}','{nama_tamu}','{instansi}','{jenis_kunjungan}','{keperluan}','{jam_kunjungan}'].map(v => (
+                        <code key={v} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{v}</code>
+                      ))}
+                    </div>
+                  </form>
+                </div>
+              </div>
 
-                  {/* Format Kode Kunjungan */}
-                  <div className="space-y-1.5 border-t border-slate-100 pt-4">
-                    <label className="text-xs font-bold text-navy">Format Kode Kunjungan (Custom Prefix & Pattern)</label>
+              {/* Card 2: Visit Code Pattern */}
+              <div className="bg-white rounded-xl border border-bordergray shadow-sm overflow-hidden">
+                <div className="flex items-center space-x-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+                  <div className="w-5 h-5 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <Key className="w-3 h-3" />
+                  </div>
+                  <h4 className="text-xs font-bold text-navy">Format Kode Kunjungan</h4>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-textsec uppercase tracking-wider">Pola Kode</label>
                     <input
+                      form="form-settings"
                       type="text"
                       value={visitCodePattern}
                       onChange={(e) => setVisitCodePattern(e.target.value)}
-                      className="w-full border border-bordergray px-3 py-2 rounded-lg outline-none focus:border-navy text-xs font-medium"
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg outline-none focus:border-navy text-xs font-medium font-mono"
                       placeholder="e.g. T-{YYYY}{MM}{DD}-{SEQ}"
                       required
                     />
                   </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['{YYYY}','{YY}','{MM}','{DD}','{SEQ}'].map(v => (
+                      <code key={v} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{v}</code>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-[10px] leading-relaxed font-bold text-textsec space-y-1">
-                    <span className="text-navy flex items-center space-x-1">
-                      <Key className="w-3 h-3" />
-                      <span>Variabel yang dapat digunakan:</span>
-                    </span>
-                    <div className="grid grid-cols-2 gap-x-2 font-mono text-[9px] mt-1">
-                      <div><code>{'{YYYY}'}</code> : Tahun 4 digit (e.g. 2026)</div>
-                      <div><code>{'{YY}'}</code> : Tahun 2 digit (e.g. 26)</div>
-                      <div><code>{'{MM}'}</code> : Bulan 2 digit (e.g. 08)</div>
-                      <div><code>{'{DD}'}</code> : Tanggal 2 digit (e.g. 20)</div>
-                      <div><code>{'{SEQ}'}</code> : Antrean hari ini (e.g. 0001)</div>
+              {/* Card 3: API Bank Data */}
+              <div className="bg-white rounded-xl border border-bordergray shadow-sm overflow-hidden">
+                <div className="flex items-center space-x-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+                  <div className="w-5 h-5 rounded-md bg-violet-100 text-violet-600 flex items-center justify-center">
+                    <RefreshCw className="w-3 h-3" />
+                  </div>
+                  <h4 className="text-xs font-bold text-navy">Integrasi API Bank Data <span className="text-slate-400 font-medium">(Sidata Neper)</span></h4>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-textsec uppercase tracking-wider">URL Base API</label>
+                    <input
+                      form="form-settings"
+                      type="text"
+                      value={bankDataApiUrl}
+                      onChange={(e) => setBankDataApiUrl(e.target.value)}
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg outline-none focus:border-navy text-xs font-medium font-mono"
+                      placeholder="https://data.vianferdian.web.id/api/v1"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-textsec uppercase tracking-wider">X-Client-ID</label>
+                      <input
+                        form="form-settings"
+                        type="text"
+                        value={bankDataClientId}
+                        onChange={(e) => setBankDataClientId(e.target.value)}
+                        className="w-full border border-bordergray px-3 py-2 rounded-lg outline-none focus:border-navy text-xs font-medium font-mono"
+                        placeholder="Client ID"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-textsec uppercase tracking-wider">X-Client-Secret</label>
+                      <input
+                        form="form-settings"
+                        type="password"
+                        value={bankDataClientSecret}
+                        onChange={(e) => setBankDataClientSecret(e.target.value)}
+                        className="w-full border border-bordergray px-3 py-2 rounded-lg outline-none focus:border-navy text-xs font-medium"
+                        placeholder="••••••••••••"
+                      />
                     </div>
                   </div>
-
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-navy hover:bg-navy-secondary text-white text-xs font-bold rounded-lg shadow-sm transition"
-                  >
-                    Simpan Pengaturan
-                  </button>
-                </form>
+                  <p className="text-[10px] text-textsec leading-relaxed">
+                    Digunakan untuk pencarian data <strong>Siswa</strong> di form tamu dan <strong>sinkronisasi Guru & Tendik</strong> di menu Pegawai. Nilai disimpan di database dan tidak perlu mengubah file <code className="bg-slate-100 px-1 rounded">.env</code>.
+                  </p>
+                </div>
               </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end">
+                <button
+                  form="form-settings"
+                  type="submit"
+                  className="px-5 py-2 bg-navy hover:bg-navy-secondary text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center space-x-2"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Simpan Semua Pengaturan</span>
+                </button>
+              </div>
+
             </div>
           )}
+
+
 
         </div>
 

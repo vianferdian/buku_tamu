@@ -6,6 +6,7 @@ const multer = require('multer');
 const ExcelJS = require('exceljs');
 const upload = multer({ storage: multer.memoryStorage() });
 const { verifyToken, isAdmin, logActivity } = require('../middleware/auth');
+const BankDataService = require('../services/bankDataService');
 
 // Normalize WhatsApp number
 function normalizePhoneNumber(phone) {
@@ -394,6 +395,137 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Gagal menghapus pegawai. Mungkin data masih terikat dengan riwayat kunjungan.' });
+  }
+});
+
+// @route   POST /api/employees/sync
+// @desc    Sync employees from bank-data API (Admin only)
+router.post('/sync', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const rawEmployees = await BankDataService.fetchAllEmployees();
+    if (!rawEmployees || rawEmployees.length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada data guru/pegawai yang ditemukan dari bank-data.' });
+    }
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    const departments = await prisma.department.findMany();
+    const deptMap = {};
+    departments.forEach(d => {
+      deptMap[d.name.toLowerCase()] = d.id;
+    });
+
+    const fallbackDeptId = departments[0]?.id || null;
+
+    for (const emp of rawEmployees) {
+      let deptName = 'Tata Usaha'; // Default
+      const positionLower = (emp.primary_subject || emp.ptk_type || '').toLowerCase();
+      
+      if (positionLower.includes('kepala sekolah')) {
+        deptName = 'Kepala Sekolah';
+      } else if (positionLower.includes('wakil')) {
+        deptName = 'Wakil Kepala Sekolah';
+      } else if (positionLower.includes('bp') || positionLower.includes('bk') || positionLower.includes('konseling') || positionLower.includes('bimbingan')) {
+        deptName = 'BP/BK';
+      } else if (positionLower.includes('bkk') || positionLower.includes('bursa kerja')) {
+        deptName = 'BKK';
+      } else if (positionLower.includes('guru') || positionLower.includes('mapel') || positionLower.includes('pengajar') || positionLower.includes('pplg') || positionLower.includes('rpl') || positionLower.includes('titl') || positionLower.includes('dpib') || positionLower.includes('otomotif') || positionLower.includes('tkr') || positionLower.includes('tpm') || positionLower.includes('mesin') || positionLower.includes('listrik') || positionLower.includes('jaringan') || positionLower.includes('tjkt')) {
+        deptName = 'Guru';
+      } else if (positionLower.includes('kepala konsentrasi') || positionLower.includes('kaprog') || positionLower.includes('kakomli')) {
+        deptName = 'Kepala Konsentrasi Keahlian';
+      } else if (positionLower.includes('tendik') || positionLower.includes('administrasi') || positionLower.includes('tata usaha') || positionLower.includes('tu') || positionLower.includes('staf') || positionLower.includes('staff')) {
+        deptName = 'Tata Usaha';
+      } else {
+        deptName = 'Lainnya';
+      }
+
+      const departmentId = deptMap[deptName.toLowerCase()] || fallbackDeptId;
+
+      if (!departmentId) {
+        continue;
+      }
+
+      const name = emp.full_name.trim();
+      const nip = emp.nip ? emp.nip.trim() : null;
+      
+      let position = emp.ptk_type || 'Pegawai';
+      if (emp.primary_subject) {
+        position = `${emp.ptk_type} - ${emp.primary_subject}`;
+      }
+
+      const phone = emp.whatsapp || emp.phone || '';
+      let normalizedPhone = normalizePhoneNumber(phone);
+      if (!normalizedPhone) {
+        normalizedPhone = '6280000000000'; // Default fallback
+      }
+
+      const email = emp.email || null;
+      const isActive = emp.status === 'Aktif' || emp.status === 'Active' || emp.status === 'active' || true;
+      const expertise = emp.major_expertise || null;
+
+      let existing = null;
+      if (nip) {
+        existing = await prisma.employee.findFirst({
+          where: {
+            OR: [
+              { nip: nip },
+              { name: name }
+            ]
+          }
+        });
+      } else {
+        existing = await prisma.employee.findFirst({
+          where: { name: name }
+        });
+      }
+
+      if (existing) {
+        await prisma.employee.update({
+          where: { id: existing.id },
+          data: {
+            name,
+            nip,
+            position,
+            departmentId,
+            phone: normalizedPhone,
+            email,
+            expertise,
+            isActive
+          }
+        });
+        updatedCount++;
+      } else {
+        await prisma.employee.create({
+          data: {
+            name,
+            nip,
+            position,
+            departmentId,
+            phone: normalizedPhone,
+            email,
+            expertise,
+            isActive
+          }
+        });
+        createdCount++;
+      }
+    }
+
+    await logActivity(req.user.id, 'SYNC_EMPLOYEES', `Sinkronisasi pegawai dari bank-data API (${rawEmployees.length} data)`);
+
+    return res.json({
+      success: true,
+      message: `Sinkronisasi selesai. Berhasil menyinkronkan ${rawEmployees.length} pegawai dari bank-data.`,
+      data: {
+        total: rawEmployees.length,
+        created: createdCount,
+        updated: updatedCount
+      }
+    });
+  } catch (error) {
+    console.error('syncEmployees error:', error);
+    return res.status(500).json({ message: 'Gagal melakukan sinkronisasi data guru/pegawai.' });
   }
 });
 

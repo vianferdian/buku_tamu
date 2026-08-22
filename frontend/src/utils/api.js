@@ -43,6 +43,7 @@ export const employeeApi = {
   create: (data) => api.post('/employees', data),
   update: (id, data) => api.put(`/employees/${id}`, data),
   delete: (id) => api.delete(`/employees/${id}`),
+  syncEmployees: () => api.post('/employees/sync'),
   getTemplateUrl: () => {
     const token = localStorage.getItem('token');
     return `${API_BASE_URL}/employees/template?token=${token}`;
@@ -72,6 +73,7 @@ export const purposeApi = {
 
 // Visit API helpers
 export const visitApi = {
+  searchBankDataStudents: (search) => api.get('/visits/bank-data/students', { params: { search } }),
   submit: (data) => api.post('/visits', data),
   getAll: (params = {}) => api.get('/visits', { params }),
   contact: (id) => api.patch(`/visits/${id}/contact`),

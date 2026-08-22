@@ -3,6 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { verifyToken, isSecurityOrAdmin, isAdmin, logActivity } = require('../middleware/auth');
+const BankDataService = require('../services/bankDataService');
 
 // Helper to get time-of-day greeting (Pagi/Siang/Sore/Malam)
 function getGreeting() {
@@ -20,6 +21,19 @@ function formatTime(date) {
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${hh}:${mm} WIB`;
 }
+
+// @route   GET /api/visits/bank-data/students
+// @desc    Search students from bank-data API (Public proxy)
+router.get('/bank-data/students', async (req, res) => {
+  try {
+    const { search = '' } = req.query;
+    const students = await BankDataService.fetchStudents(search);
+    res.json(students);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Gagal mencari data siswa.' });
+  }
+});
 
 // @route   POST /api/visits
 // @desc    Register a new guest visit (Guest self-service)
