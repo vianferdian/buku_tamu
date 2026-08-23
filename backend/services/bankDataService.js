@@ -121,7 +121,92 @@ const fetchAllEmployees = async () => {
   }
 };
 
+/**
+ * Fetch all students from bank-data API (handling pagination).
+ * @returns {Promise<Array>}
+ */
+const fetchAllStudents = async () => {
+  try {
+    const config = await getApiConfig();
+    let allStudents = [];
+    let page = 1;
+    let lastPage = 1;
+
+    do {
+      const url = new URL(`${config.url}/students`);
+      url.searchParams.append('page', page.toString());
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-ID': config.clientId,
+          'X-Client-Secret': config.clientSecret,
+        },
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errText}`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        allStudents = allStudents.concat(result.data);
+        if (result.meta && result.meta.last_page) {
+          lastPage = result.meta.last_page;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+      page++;
+    } while (page <= lastPage);
+
+    return allStudents;
+  } catch (error) {
+    console.error('Error in fetchAllStudents from bank-data:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch a specific page of students from bank-data API.
+ * @param {number} page
+ * @returns {Promise<Object>}
+ */
+const fetchStudentsPage = async (page = 1) => {
+  try {
+    const config = await getApiConfig();
+    const url = new URL(`${config.url}/students`);
+    url.searchParams.append('page', page.toString());
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-ID': config.clientId,
+        'X-Client-Secret': config.clientSecret,
+      },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errText}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error(`Error in fetchStudentsPage from bank-data on page ${page}:`, error);
+    throw error;
+  }
+};
+
 module.exports = {
   fetchStudents,
   fetchAllEmployees,
+  fetchAllStudents,
+  fetchStudentsPage,
 };

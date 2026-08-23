@@ -23,12 +23,43 @@ function formatTime(date) {
 }
 
 // @route   GET /api/visits/bank-data/students
-// @desc    Search students from bank-data API (Public proxy)
+// @desc    Search students from local master data (originally proxying bank-data API)
 router.get('/bank-data/students', async (req, res) => {
   try {
     const { search = '' } = req.query;
-    const students = await BankDataService.fetchStudents(search);
-    res.json(students);
+    const where = { isActive: true };
+
+    if (search.trim()) {
+      where.OR = [
+        { fullName: { contains: search } },
+        { nis: { contains: search } },
+        { className: { contains: search } }
+      ];
+    }
+
+    const students = await prisma.student.findMany({
+      where,
+      take: 20,
+      orderBy: { fullName: 'asc' }
+    });
+
+    // Map to response format frontend expects
+    const mapped = students.map(s => ({
+      uuid: s.uuid,
+      nis: s.nis,
+      nisn: s.nisn,
+      full_name: s.fullName,
+      gender: s.gender,
+      birth_place: s.birthPlace,
+      birth_date: s.birthDate,
+      religion: s.religion,
+      class: {
+        name: s.className,
+        major: s.major || ''
+      }
+    }));
+
+    res.json(mapped);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Gagal mencari data siswa.' });

@@ -96,6 +96,16 @@ export const userApi = {
   delete: (id) => api.delete(`/users/${id}`),
 };
 
+// Student API helpers
+export const studentApi = {
+  getAll: (params = {}) => api.get('/students', { params }),
+  create: (data) => api.post('/students', data),
+  update: (id, data) => api.put(`/students/${id}`, data),
+  delete: (id) => api.delete(`/students/${id}`),
+  deleteAll: () => api.delete('/students'),
+  syncStudents: (page) => api.post(`/students/sync?page=${page}`),
+};
+
 // Report API helpers
 export const reportApi = {
   getDashboard: () => api.get('/reports/dashboard'),

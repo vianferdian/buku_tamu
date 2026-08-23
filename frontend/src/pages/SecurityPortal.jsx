@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import logoImg from '../assets/logo.png';
 import { 
   LogOut, Shield, Clock, Users, UserPlus, PhoneCall, CheckSquare, 
-  Search, Filter, Phone, CheckCircle2
+  Search, Filter, Phone, CheckCircle2, Activity, Calendar, AlertTriangle
 } from 'lucide-react';
 import { visitApi } from '../utils/api';
 
@@ -12,6 +12,9 @@ export default function SecurityPortal() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [user, setUser] = useState(null);
+
+  // Real-time clock
+  const [now, setNow] = useState(new Date());
 
   // Statistics
   const [stats, setStats] = useState({
@@ -33,6 +36,12 @@ export default function SecurityPortal() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const [loading, setLoading] = useState(false);
+
+  // Real-time clock ticker
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Check login
   useEffect(() => {
@@ -195,194 +204,274 @@ export default function SecurityPortal() {
     return new Date(date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   };
 
+  // Elapsed time since visit arrived
+  const getElapsed = (visitedAt) => {
+    const diffMs = now - new Date(visitedAt);
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'Baru saja';
+    if (mins < 60) return `${mins} menit lalu`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs} jam ${mins % 60} menit lalu`;
+  };
+
+  const getElapsedMinutes = (visitedAt) => {
+    return Math.floor((now - new Date(visitedAt)) / 60000);
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  };
+
   return (
     <div className="min-h-screen bg-bgmain flex flex-col justify-between">
       {/* Top Navbar */}
-      <header className="bg-white border-b border-bordergray shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <header className="bg-white border-b border-bordergray shadow-sm sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-6 py-3.5 flex justify-between items-center">
+          {/* Left: Logo + title */}
           <div className="flex items-center space-x-3">
             <img src={logoImg} alt="Logo" className="w-9 h-9 object-contain" />
             <div>
-              <h1 className="font-extrabold text-navy text-sm leading-none sm:text-base">SMK Negeri 1 Cirebon</h1>
-              <span className="text-[10px] text-textsec font-semibold tracking-wider block mt-0.5">BUKU TAMU SECURITY</span>
+              <h1 className="font-extrabold text-navy text-sm leading-none">SMK Negeri 1 Cirebon</h1>
+              <span className="text-[9px] text-textsec font-bold tracking-widest block mt-0.5 uppercase">Portal Petugas Keamanan</span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-navy">{user?.name}</p>
-              <span className="text-[9px] font-bold text-textsec uppercase bg-slate-100 px-2 py-0.5 rounded-full">{user?.role}</span>
+          {/* Center: Real-time clock */}
+          <div className="hidden md:flex flex-col items-center">
+            <span className="text-xl font-extrabold text-navy tabular-nums leading-none">
+              {now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+            <span className="text-[9px] text-textsec font-semibold mt-0.5">
+              {now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </span>
+          </div>
+
+          {/* Right: User info + logout */}
+          <div className="flex items-center space-x-3">
+            <div className="hidden sm:flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-500 to-blue-700 text-white flex items-center justify-center text-xs font-extrabold shadow">
+                {getInitials(user?.name)}
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-navy leading-none">{user?.name}</p>
+                <span className="text-[9px] font-bold text-sky-600 uppercase tracking-wide">Security</span>
+              </div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-lg transition"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-lg transition text-[10px] font-bold"
               title="Logout"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Keluar</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         
         {/* Navigation Tabs */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-bordergray gap-4">
-          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-bordergray gap-3">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 self-start gap-1">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`px-4 py-2 rounded-md text-xs font-bold transition ${
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'dashboard'
-                  ? 'bg-navy text-white shadow-sm'
-                  : 'text-textsec hover:text-navy'
+                  ? 'bg-navy text-white shadow'
+                  : 'text-textsec hover:text-navy hover:bg-white'
               }`}
             >
-              Antrean Aktif
+              <Activity className="w-3.5 h-3.5" />
+              <span>Antrean Aktif</span>
+              {activeVisits.length > 0 && (
+                <span className={`ml-1 w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center ${
+                  activeTab === 'dashboard' ? 'bg-white text-navy' : 'bg-navy text-white'
+                }`}>
+                  {activeVisits.length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`px-4 py-2 rounded-md text-xs font-bold transition ${
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'history'
-                  ? 'bg-navy text-white shadow-sm'
-                  : 'text-textsec hover:text-navy'
+                  ? 'bg-navy text-white shadow'
+                  : 'text-textsec hover:text-navy hover:bg-white'
               }`}
             >
-              Riwayat Kunjungan
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Riwayat Kunjungan</span>
             </button>
           </div>
 
-          <div className="flex items-center space-x-1.5 text-textsec text-xs font-semibold">
-            <Clock className="w-3.5 h-3.5" />
-            <span>{formatDateText(new Date())}</span>
+          <div className="flex items-center space-x-1.5 text-textsec text-[10px] font-semibold md:hidden">
+            <Clock className="w-3 h-3" />
+            <span>{now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB</span>
           </div>
         </div>
 
         {/* -------------------- TAB 1: DASHBOARD QUEUE -------------------- */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6 mt-6">
+          <div className="space-y-6 mt-6 fade-in">
             
             {/* statistics cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-bordergray flex items-center space-x-3.5 shadow-sm">
-                <div className="p-2.5 bg-slate-50 text-navy rounded-lg">
+              {/* Total */}
+              <div className="bg-gradient-to-br from-slate-700 to-navy p-4 rounded-xl flex items-center space-x-3.5 shadow text-white">
+                <div className="p-2.5 bg-white/10 rounded-xl">
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] text-textsec font-semibold block">Total Hari Ini</span>
-                  <strong className="text-xl font-extrabold text-navy">{stats.todayTotal}</strong>
+                  <span className="text-[10px] text-white/60 font-semibold block">Total Hari Ini</span>
+                  <strong className="text-2xl font-extrabold">{stats.todayTotal}</strong>
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-bordergray flex items-center space-x-3.5 shadow-sm">
-                <div className="p-2.5 bg-blue-50/50 text-blue-600 rounded-lg">
+              {/* Baru */}
+              <div className={`bg-gradient-to-br from-blue-500 to-blue-700 p-4 rounded-xl flex items-center space-x-3.5 shadow text-white ${
+                stats.newCount > 0 ? 'pulse-glow' : ''
+              }`}>
+                <div className="p-2.5 bg-white/15 rounded-xl">
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] text-textsec font-semibold block">Baru Datang</span>
-                  <strong className="text-xl font-extrabold text-blue-600">{stats.newCount}</strong>
+                  <span className="text-[10px] text-white/70 font-semibold block">Baru Datang</span>
+                  <strong className="text-2xl font-extrabold">{stats.newCount}</strong>
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-bordergray flex items-center space-x-3.5 shadow-sm">
-                <div className="p-2.5 bg-amber-50/50 text-amber-600 rounded-lg">
+              {/* Dihubungi */}
+              <div className="bg-gradient-to-br from-amber-400 to-amber-600 p-4 rounded-xl flex items-center space-x-3.5 shadow text-white">
+                <div className="p-2.5 bg-white/15 rounded-xl">
                   <PhoneCall className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] text-textsec font-semibold block">Dihubungi</span>
-                  <strong className="text-xl font-extrabold text-amber-600">{stats.contactedCount}</strong>
+                  <span className="text-[10px] text-white/70 font-semibold block">Dihubungi</span>
+                  <strong className="text-2xl font-extrabold">{stats.contactedCount}</strong>
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-bordergray flex items-center space-x-3.5 shadow-sm">
-                <div className="p-2.5 bg-emerald-50/50 text-emerald-600 rounded-lg">
+              {/* Selesai */}
+              <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 rounded-xl flex items-center space-x-3.5 shadow text-white">
+                <div className="p-2.5 bg-white/15 rounded-xl">
                   <CheckSquare className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] text-textsec font-semibold block">Selesai</span>
-                  <strong className="text-xl font-extrabold text-emerald-600">{stats.completedCount}</strong>
+                  <span className="text-[10px] text-white/70 font-semibold block">Selesai</span>
+                  <strong className="text-2xl font-extrabold">{stats.completedCount}</strong>
                 </div>
               </div>
             </div>
 
-            {/* Active Queue Cards - Minimalist clean lists */}
+            {/* Active Queue Cards */}
             <div className="space-y-4 pt-2">
-              <h3 className="text-xs font-extrabold text-navy tracking-wider uppercase">Tamu Sedang Menunggu</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-extrabold text-navy tracking-wider uppercase flex items-center space-x-1.5">
+                  <span>Tamu Sedang Menunggu</span>
+                  {activeVisits.length > 0 && (
+                    <span className="bg-navy text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full">{activeVisits.length}</span>
+                  )}
+                </h3>
+                <span className="text-[9px] text-textsec">Auto-refresh setiap 10 detik</span>
+              </div>
 
               {activeVisits.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeVisits.map(visit => {
                     const isNew = visit.status === 'NEW';
+                    const elapsedMins = getElapsedMinutes(visit.visitedAt);
+                    const isLongWait = elapsedMins >= 10;
                     return (
                       <div 
                         key={visit.id}
-                        className="bg-white rounded-xl shadow-sm border border-bordergray p-5 flex flex-col justify-between space-y-4 hover:shadow transition"
+                        className={`bg-white rounded-xl border p-5 flex flex-col justify-between space-y-4 transition hover:shadow-md ${
+                          isLongWait ? 'border-rose-300 pulse-border shadow-sm' : 'border-bordergray shadow-sm'
+                        }`}
                       >
                         <div className="space-y-3">
+                          {/* Card Header */}
                           <div className="flex justify-between items-start">
-                            <div>
+                            <div className="flex-1 min-w-0 pr-2">
                               <span className="text-[9px] font-bold text-textsec bg-slate-100 px-2 py-0.5 rounded-full">{visit.visitCode}</span>
-                              <h4 className="font-extrabold text-navy text-base mt-1.5 leading-tight">{visit.visitorName}</h4>
-                              <p className="text-[10px] text-textsec mt-0.5 font-medium">{visit.institutionName || '-'}</p>
+                              <h4 className="font-extrabold text-navy text-lg mt-1.5 leading-tight truncate">{visit.visitorName}</h4>
+                              <p className="text-[10px] text-textsec mt-0.5 font-medium">{visit.institutionName || 'Tidak ada instansi'}</p>
                             </div>
-                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold tracking-wider ${
-                              isNew ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-amber-50 text-amber-600 border border-amber-200'
-                            }`}>
-                              {isNew ? 'BARU' : 'DIHUBUNGI'}
-                            </span>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold tracking-wider ${
+                                isNew ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {isNew ? '● BARU' : '✦ DIHUBUNGI'}
+                              </span>
+                              {isLongWait && (
+                                <span className="flex items-center space-x-0.5 text-rose-500 text-[8px] font-bold">
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>Terlama</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-x-2 gap-y-2 text-[10px] pt-3 border-t border-slate-100 font-bold text-navy">
+                          {/* Elapsed Timer */}
+                          <div className={`flex items-center space-x-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-lg ${
+                            isLongWait ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-textsec'
+                          }`}>
+                            <Clock className="w-3 h-3 shrink-0" />
+                            <span>Masuk {formatHour(visit.visitedAt)} — {getElapsed(visit.visitedAt)}</span>
+                          </div>
+
+                          {/* Info Grid */}
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-[10px] pt-3 border-t border-slate-100 font-bold text-navy">
                             <div>
-                              <span className="text-[9px] text-textsec block font-medium">Jam Masuk</span>
-                              <span>{formatHour(visit.visitedAt)}</span>
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-textsec block font-medium">No WhatsApp</span>
+                              <span className="text-[9px] text-textsec block font-medium mb-0.5">No WhatsApp</span>
                               <span>{visit.visitorPhone}</span>
                             </div>
                             <div>
-                              <span className="text-[9px] text-textsec block font-medium">Tujuan</span>
+                              <span className="text-[9px] text-textsec block font-medium mb-0.5">Tujuan Bagian</span>
                               <span>{visit.department.name}</span>
                             </div>
-                            <div>
-                              <span className="text-[9px] text-textsec block font-medium">Menemui</span>
+                            <div className="col-span-2">
+                              <span className="text-[9px] text-textsec block font-medium mb-0.5">Menemui</span>
                               <span className="truncate block" title={visit.employee.name}>{visit.employee.name}</span>
                             </div>
                           </div>
 
-                          <div className="bg-slate-50/50 p-2.5 rounded-lg border border-slate-200/60 text-[10px] font-semibold text-navy">
-                            <span className="text-[9px] uppercase font-bold text-textsec block">Keperluan ({visit.visitorType.name})</span>
-                            <span className="font-bold">{visit.purpose.name}</span>
+                          {/* Purpose */}
+                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-[10px] font-semibold text-navy">
+                            <span className="text-[9px] uppercase font-bold text-textsec block mb-0.5">Keperluan ({visit.visitorType.name})</span>
+                            <span className="font-bold text-navy">{visit.purpose.name}</span>
                             {visit.purposeDescription && (
-                              <span className="text-textsec font-medium block italic mt-0.5">"{visit.purposeDescription}"</span>
+                              <span className="text-textsec font-medium block italic mt-0.5 text-[9px]">&quot;{visit.purposeDescription}&quot;</span>
                             )}
                           </div>
 
+                          {/* Student Badge */}
                           {visit.studentName && (
-                            <div className="bg-blue-50/30 p-2 rounded-lg border border-blue-100 text-[9px] font-semibold text-navy">
-                              <span className="text-blue-800 font-bold block">Siswa:</span>
-                              <span>{visit.studentName} (Kelas {visit.studentClass})</span>
+                            <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 text-[9px] font-semibold text-navy">
+                              <span className="text-blue-700 font-extrabold block">🎓 Siswa:</span>
+                              <span>{visit.studentName} — Kelas {visit.studentClass}</span>
                             </div>
                           )}
                         </div>
 
-                        {/* Actions */}
+                        {/* Action Buttons */}
                         <div className="grid grid-cols-1 gap-2 pt-3 border-t border-slate-100">
                           <button
                             onClick={() => handleContact(visit.id)}
-                            className="w-full py-2 bg-navy hover:bg-navy-secondary text-white text-[10px] font-bold rounded-lg flex items-center justify-center space-x-1 transition"
+                            className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-[10px] font-extrabold rounded-xl flex items-center justify-center space-x-2 transition shadow-sm"
                           >
-                            <Phone className="w-3 h-3" />
-                            <span>HUBUNGI WHATSAPP</span>
+                            <Phone className="w-3.5 h-3.5" />
+                            <span>HUBUNGI via WhatsApp</span>
                           </button>
                           
                           <button
                             onClick={() => handleComplete(visit.id)}
-                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg flex items-center justify-center space-x-1 transition"
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-extrabold rounded-xl flex items-center justify-center space-x-2 transition shadow-sm"
                           >
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>KUNJUNGAN SELESAI</span>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>TANDAI SELESAI</span>
                           </button>
                         </div>
 
@@ -391,9 +480,10 @@ export default function SecurityPortal() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-white rounded-xl border border-dashed border-bordergray">
+                <div className="text-center py-16 bg-white rounded-xl border border-dashed border-bordergray">
+                  <Shield className="w-10 h-10 text-slate-200 mx-auto mb-3" />
                   <h4 className="text-navy font-bold text-sm">Tidak ada tamu aktif saat ini</h4>
-                  <p className="text-textsec text-xs mt-0.5">Tamu yang mengisi formulir akan muncul otomatis di sini.</p>
+                  <p className="text-textsec text-xs mt-1">Tamu yang mengisi formulir akan muncul otomatis di sini.</p>
                 </div>
               )}
             </div>
@@ -408,13 +498,13 @@ export default function SecurityPortal() {
             {/* Filter Log Bar */}
             <form onSubmit={handleSearchSubmit} className="bg-white p-4 rounded-xl border border-bordergray shadow-sm space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="text-navy font-bold text-xs flex items-center space-x-1">
+                <span className="text-navy font-bold text-xs flex items-center space-x-1.5">
                   <Filter className="w-3.5 h-3.5" />
-                  <span>Saring Hasil</span>
+                  <span>Filter Riwayat</span>
                 </span>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-navy hover:bg-navy-secondary text-white text-[10px] font-bold rounded-md transition"
+                  className="px-3.5 py-1.5 bg-navy hover:bg-navy-secondary text-white text-[10px] font-bold rounded-lg transition"
                 >
                   Terapkan Filter
                 </button>
@@ -585,7 +675,7 @@ export default function SecurityPortal() {
 
       {/* Footer */}
       <footer className="w-full text-center text-[10px] text-textsec py-4 bg-white border-t border-bordergray">
-        © 2026 SMK Negeri 1 Cirebon. All rights reserved.
+        © 2026 SMK Negeri 1 Cirebon — Portal Petugas Keamanan. All rights reserved.
       </footer>
     </div>
   );

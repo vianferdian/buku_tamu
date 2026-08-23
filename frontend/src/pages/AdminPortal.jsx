@@ -10,16 +10,24 @@ import {
 import { 
   LayoutDashboard, Users, UserCog, Settings, FolderTree, FileSpreadsheet, 
   HelpCircle, UserCheck, LogOut, Plus, Edit, Trash2, CheckCircle, XCircle, 
-  FileText, ShieldAlert, Key, Calendar, RefreshCw
+  FileText, ShieldAlert, Key, Calendar, RefreshCw, GraduationCap,
+  TrendingUp, CalendarDays, CalendarRange, Clock
 } from 'lucide-react';
 import { 
-  deptApi, employeeApi, visitorTypeApi, purposeApi, userApi, settingApi, visitApi, reportApi 
+  deptApi, employeeApi, visitorTypeApi, purposeApi, userApi, settingApi, visitApi, reportApi, studentApi 
 } from '../utils/api';
 
 export default function AdminPortal() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [adminUser, setAdminUser] = useState(null);
+
+  // Real-time clock
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // General State
   const [loading, setLoading] = useState(false);
@@ -40,6 +48,8 @@ export default function AdminPortal() {
   const [visitorTypes, setVisitorTypes] = useState([]);
   const [purposes, setPurposes] = useState([]);
   const [users, setUsers] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [studentsFilter, setStudentsFilter] = useState({ search: '' });
 
   // 4. Settings State
   const [waTemplate, setWaTemplate] = useState('');
@@ -49,10 +59,12 @@ export default function AdminPortal() {
   const [bankDataClientId, setBankDataClientId] = useState('');
   const [bankDataClientSecret, setBankDataClientSecret] = useState('');
   const [syncingEmployees, setSyncingEmployees] = useState(false);
+  const [syncingStudents, setSyncingStudents] = useState(false);
 
   // Pagination states
   const [visitsPage, setVisitsPage] = useState(1);
   const [employeesPage, setEmployeesPage] = useState(1);
+  const [studentsPage, setStudentsPage] = useState(1);
 
   // CRUD Modal Form State
   const [showModal, setShowModal] = useState(false);
@@ -65,6 +77,18 @@ export default function AdminPortal() {
   const [vTypeForm, setVTypeForm] = useState({ name: '', isActive: true, sortOrder: 0 });
   const [purposeForm, setPurposeForm] = useState({ visitorTypeId: '', name: '', isActive: true, sortOrder: 0 });
   const [userForm, setUserForm] = useState({ name: '', username: '', password: '', role: 'SECURITY', isActive: true });
+  const [studentForm, setStudentForm] = useState({
+    fullName: '',
+    nis: '',
+    nisn: '',
+    className: '',
+    major: '',
+    gender: 'L',
+    birthPlace: '',
+    birthDate: '',
+    religion: '',
+    isActive: true
+  });
 
   // Validate admin token
   useEffect(() => {
@@ -204,6 +228,19 @@ export default function AdminPortal() {
     }
   };
 
+  const fetchStudentsList = async () => {
+    setLoading(true);
+    try {
+      const res = await studentApi.getAll(studentsFilter);
+      setStudents(res.data);
+    } catch (err) {
+      console.error(err);
+      triggerError('Gagal memuat data siswa.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Master Loader
   useEffect(() => {
     if (adminUser) {
@@ -224,9 +261,10 @@ export default function AdminPortal() {
         fetchVisitorTypes();
       }
       else if (activeMenu === 'users') fetchUsers();
+      else if (activeMenu === 'students') fetchStudentsList();
       else if (activeMenu === 'settings') fetchSettings();
     }
-  }, [adminUser, activeMenu, visitFilters]);
+  }, [adminUser, activeMenu, visitFilters, studentsFilter]);
 
   // Reset page indices on list changes
   useEffect(() => {
@@ -236,6 +274,10 @@ export default function AdminPortal() {
   useEffect(() => {
     setEmployeesPage(1);
   }, [employees.length]);
+
+  useEffect(() => {
+    setStudentsPage(1);
+  }, [students.length]);
 
   // Handle Logout
   const handleLogout = () => {
@@ -394,6 +436,19 @@ export default function AdminPortal() {
         role: item ? item.role : 'SECURITY',
         isActive: item ? item.isActive : true
       });
+    } else if (type === 'students') {
+      setStudentForm({
+        fullName: item ? item.fullName : '',
+        nis: item ? item.nis : '',
+        nisn: item ? item.nisn || '' : '',
+        className: item ? item.className : '',
+        major: item ? item.major || '' : '',
+        gender: item ? item.gender || 'L' : 'L',
+        birthPlace: item ? item.birthPlace || '' : '',
+        birthDate: item ? item.birthDate || '' : '',
+        religion: item ? item.religion || '' : '',
+        isActive: item ? item.isActive : true
+      });
     }
 
     setShowModal(type);
@@ -454,6 +509,16 @@ export default function AdminPortal() {
         }
         fetchUsers();
       }
+      else if (showModal === 'students') {
+        if (modalType === 'create') {
+          await studentApi.create(studentForm);
+          triggerSuccess('Siswa berhasil dibuat.');
+        } else {
+          await studentApi.update(editId, studentForm);
+          triggerSuccess('Siswa berhasil diubah.');
+        }
+        fetchStudentsList();
+      }
       
       setShowModal(false);
     } catch (err) {
@@ -490,6 +555,9 @@ export default function AdminPortal() {
           } else if (type === 'users') {
             await userApi.delete(id);
             fetchUsers();
+          } else if (type === 'students') {
+            await studentApi.delete(id);
+            fetchStudentsList();
           }
           triggerSuccess('Data berhasil dihapus.');
         } catch (err) {
@@ -546,6 +614,112 @@ export default function AdminPortal() {
     } finally {
       setSyncingEmployees(false);
     }
+  };
+
+  const handleSyncStudents = async () => {
+    let currentPage = 1;
+    let lastPage = 1;
+    let totalCreated = 0;
+    let totalUpdated = 0;
+
+    Swal.fire({
+      title: 'Sinkronisasi Data Siswa',
+      html: `Menghubungkan ke API Bank Data...<br/>
+             <div class="w-full bg-slate-200 h-2.5 rounded-full mt-3 overflow-hidden">
+               <div id="sync-progress-bar" class="bg-emerald-600 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+             </div>
+             <div id="sync-progress-text" class="text-[10px] text-slate-500 mt-1.5 font-bold">Mempersiapkan...</div>`,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    setSyncingStudents(true);
+    try {
+      do {
+        const res = await studentApi.syncStudents(currentPage);
+        if (!res.data.success) {
+          throw new Error(res.data.message || 'Gagal menyinkronkan data.');
+        }
+
+        const meta = res.data.meta || {};
+        lastPage = meta.last_page || 1;
+        totalCreated += res.data.data.created;
+        totalUpdated += res.data.data.updated;
+
+        const percent = Math.round((currentPage / lastPage) * 100);
+
+        const progressBar = document.getElementById('sync-progress-bar');
+        const progressText = document.getElementById('sync-progress-text');
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressText) {
+          progressText.innerText = `Menyimpan Halaman ${currentPage} dari ${lastPage} (${percent}%)`;
+        }
+
+        currentPage++;
+
+        if (currentPage <= lastPage) {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+        }
+      } while (currentPage <= lastPage);
+
+      Swal.fire({
+        title: 'Sinkronisasi Sukses',
+        text: `Berhasil menyinkronkan total ${totalCreated + totalUpdated} siswa. (Baru: ${totalCreated}, Diperbarui: ${totalUpdated})`,
+        icon: 'success',
+        confirmButtonColor: '#0F2744'
+      });
+      fetchStudentsList();
+    } catch (err) {
+      console.error(err);
+      Swal.fire({
+        title: 'Gagal',
+        text: err.response?.data?.message || err.message || 'Gagal menyinkronkan data siswa.',
+        icon: 'error',
+        confirmButtonColor: '#0F2744'
+      });
+    } finally {
+      setSyncingStudents(false);
+    }
+  };
+
+  const handleDeleteAllStudents = () => {
+    Swal.fire({
+      title: 'Kosongkan Data Siswa?',
+      text: 'Tindakan ini akan menghapus seluruh data siswa lokal secara permanen!',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#64748B',
+      confirmButtonText: 'Ya, Kosongkan!',
+      cancelButtonText: 'Batal'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Konfirmasi Terakhir',
+          text: 'Apakah Anda benar-benar yakin ingin mengosongkan seluruh data siswa?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#64748B',
+          confirmButtonText: 'Ya, Hapus Semua!',
+          cancelButtonText: 'Batal'
+        }).then(async (res2) => {
+          if (res2.isConfirmed) {
+            try {
+              await studentApi.deleteAll();
+              triggerSuccess('Seluruh data siswa berhasil dihapus.');
+              fetchStudentsList();
+            } catch (err) {
+              console.error(err);
+              triggerError(err.response?.data?.message || 'Gagal menghapus data siswa.');
+            }
+          }
+        });
+      }
+    });
   };
 
   const handleDownloadTemplate = () => {
@@ -687,12 +861,17 @@ export default function AdminPortal() {
   const totalEmployeesPages = Math.max(Math.ceil(employees.length / employeesPerPage), 1);
   const paginatedEmployees = employees.slice((employeesPage - 1) * employeesPerPage, employeesPage * employeesPerPage);
 
+  const studentsPerPage = 10;
+  const totalStudentsPages = Math.max(Math.ceil(students.length / studentsPerPage), 1);
+  const paginatedStudents = students.slice((studentsPage - 1) * studentsPerPage, studentsPage * studentsPerPage);
+
   const getMenuTitle = () => {
     switch (activeMenu) {
       case 'dashboard': return 'Dashboard Analisis';
       case 'visits': return 'Rekap Data Kunjungan';
       case 'departments': return 'Master Bagian / Unit';
       case 'employees': return 'Master Guru & Pegawai';
+      case 'students': return 'Master Data Siswa';
       case 'visitorTypes': return 'Master Jenis Kunjungan';
       case 'purposes': return 'Master Keperluan Tamu';
       case 'users': return 'Master Pengguna Sistem';
@@ -701,22 +880,42 @@ export default function AdminPortal() {
     }
   };
 
+  const getMenuIcon = () => {
+    switch (activeMenu) {
+      case 'dashboard': return <LayoutDashboard className="w-4 h-4" />;
+      case 'visits':    return <FileSpreadsheet className="w-4 h-4" />;
+      case 'departments': return <FolderTree className="w-4 h-4" />;
+      case 'employees': return <Users className="w-4 h-4" />;
+      case 'students':  return <GraduationCap className="w-4 h-4" />;
+      case 'visitorTypes': return <UserCheck className="w-4 h-4" />;
+      case 'purposes':  return <HelpCircle className="w-4 h-4" />;
+      case 'users':     return <UserCog className="w-4 h-4" />;
+      case 'settings':  return <Settings className="w-4 h-4" />;
+      default: return null;
+    }
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  };
+
   return (
     <div className="min-h-screen bg-bgmain flex flex-col md:flex-row">
       {/* -------------------- SIDEBAR MENU -------------------- */}
       <aside className="w-full md:w-56 bg-[#0B1F3A] text-white flex flex-col shrink-0">
         {/* Logo */}
-        <div className="px-5 py-5 flex items-center space-x-2.5">
+        <div className="px-5 py-5 flex items-center space-x-2.5 border-b border-white/5">
           <img src={logoImg} alt="Logo" className="w-7 h-7 object-contain bg-white/90 p-0.5 rounded-md" />
           <div>
             <h1 className="font-bold text-[11px] leading-none tracking-wide">SMKN 1 CIREBON</h1>
-            <span className="text-[9px] text-slate-400 font-medium tracking-widest">ADMIN PANEL</span>
+            <span className="text-[9px] text-sky-400/70 font-medium tracking-widest">ADMIN PANEL</span>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 pb-4 space-y-0.5 text-[11px] font-semibold overflow-y-auto">
+        <nav className="flex-1 px-3 py-3 space-y-0.5 text-[11px] font-semibold overflow-y-auto">
           {/* Group: Main */}
-          <div className="pt-2 pb-1 px-2 text-[9px] text-white/30 tracking-widest uppercase font-bold">Menu Utama</div>
+          <div className="pt-1 pb-1 px-2 text-[9px] text-white/30 tracking-widest uppercase font-bold">Menu Utama</div>
 
           {[
             { key: 'dashboard', icon: <LayoutDashboard className="w-3.5 h-3.5" />, label: 'Dashboard' },
@@ -725,15 +924,14 @@ export default function AdminPortal() {
             <button
               key={key}
               onClick={() => setActiveMenu(key)}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md transition-all ${
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg transition-all ${
                 activeMenu === key
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  ? 'bg-sky-500/15 text-white border-l-2 border-sky-400'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white border-l-2 border-transparent'
               }`}
             >
               {icon}
               <span>{label}</span>
-              {activeMenu === key && <span className="ml-auto w-1 h-4 rounded-full bg-sky-400" />}
             </button>
           ))}
 
@@ -743,6 +941,7 @@ export default function AdminPortal() {
           {[
             { key: 'departments',  icon: <FolderTree className="w-3.5 h-3.5" />,     label: 'Bagian / Unit' },
             { key: 'employees',   icon: <Users className="w-3.5 h-3.5" />,          label: 'Guru & Pegawai' },
+            { key: 'students',    icon: <GraduationCap className="w-3.5 h-3.5" />,  label: 'Siswa' },
             { key: 'visitorTypes',icon: <UserCheck className="w-3.5 h-3.5" />,      label: 'Jenis Kunjungan' },
             { key: 'purposes',    icon: <HelpCircle className="w-3.5 h-3.5" />,     label: 'Keperluan Tamu' },
             { key: 'users',       icon: <UserCog className="w-3.5 h-3.5" />,        label: 'Pengguna' },
@@ -750,15 +949,14 @@ export default function AdminPortal() {
             <button
               key={key}
               onClick={() => setActiveMenu(key)}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md transition-all ${
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg transition-all ${
                 activeMenu === key
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  ? 'bg-sky-500/15 text-white border-l-2 border-sky-400'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white border-l-2 border-transparent'
               }`}
             >
               {icon}
               <span>{label}</span>
-              {activeMenu === key && <span className="ml-auto w-1 h-4 rounded-full bg-sky-400" />}
             </button>
           ))}
 
@@ -771,15 +969,14 @@ export default function AdminPortal() {
             <button
               key={key}
               onClick={() => setActiveMenu(key)}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md transition-all ${
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg transition-all ${
                 activeMenu === key
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  ? 'bg-sky-500/15 text-white border-l-2 border-sky-400'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white border-l-2 border-transparent'
               }`}
             >
               {icon}
               <span>{label}</span>
-              {activeMenu === key && <span className="ml-auto w-1 h-4 rounded-full bg-sky-400" />}
             </button>
           ))}
         </nav>
@@ -787,10 +984,13 @@ export default function AdminPortal() {
         {/* Bottom user badge */}
         <div className="px-4 py-3 border-t border-white/5 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center text-[10px] font-bold">
-              {adminUser?.name?.charAt(0)?.toUpperCase()}
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-500 to-blue-700 text-white flex items-center justify-center text-[10px] font-extrabold shadow">
+              {getInitials(adminUser?.name)}
             </div>
-            <span className="text-[10px] text-slate-300 font-medium truncate max-w-[90px]">{adminUser?.name}</span>
+            <div>
+              <span className="text-[10px] text-white font-semibold block truncate max-w-[90px]">{adminUser?.name}</span>
+              <span className="text-[8px] text-sky-400/80 font-bold uppercase tracking-wide">Administrator</span>
+            </div>
           </div>
           <button
             onClick={handleLogout}
@@ -806,47 +1006,82 @@ export default function AdminPortal() {
         <div>
           {/* Header */}
           <div className="flex justify-between items-center pb-4 border-b border-bordergray gap-4">
-            <div>
-              <h2 className="text-base font-extrabold text-navy tracking-tight">{getMenuTitle()}</h2>
-              <p className="text-[10px] text-textsec mt-0.5">SMK Negeri 1 Cirebon — Buku Tamu Digital</p>
+            <div className="flex items-center space-x-2.5">
+              <div className="p-2 bg-navy/5 text-navy rounded-lg">
+                {getMenuIcon()}
+              </div>
+              <div>
+                <h2 className="text-base font-extrabold text-navy tracking-tight">{getMenuTitle()}</h2>
+                <p className="text-[10px] text-textsec mt-0.5">SMK Negeri 1 Cirebon — Buku Tamu Digital</p>
+              </div>
+            </div>
+            {/* Real-time clock */}
+            <div className="hidden lg:flex items-center space-x-2 text-right">
+              <div className="p-2 bg-slate-50 border border-bordergray rounded-lg">
+                <div className="flex items-center space-x-1.5 text-navy">
+                  <Clock className="w-3.5 h-3.5 text-textsec" />
+                  <span className="text-sm font-extrabold tabular-nums">
+                    {now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+                <p className="text-[9px] text-textsec text-right mt-0.5">
+                  {now.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+              </div>
             </div>
           </div>
 
           {/* ==================== 1. PANEL: DASHBOARD METRICS ==================== */}
           {activeMenu === 'dashboard' && (
-            <div className="space-y-6 mt-6">
+            <div className="space-y-6 mt-6 fade-in">
               {/* Summary Stats Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-bordergray flex items-center justify-between shadow-sm">
+                {/* Hari Ini */}
+                <div className="bg-gradient-to-br from-navy to-navy-secondary p-5 rounded-xl flex items-center justify-between shadow text-white">
                   <div>
-                    <span className="text-[10px] text-textsec font-bold block">Hari Ini</span>
-                    <strong className="text-2xl font-extrabold text-navy">{dashSummary.today}</strong>
+                    <span className="text-[10px] text-white/60 font-bold block">Hari Ini</span>
+                    <strong className="text-2xl font-extrabold">{dashSummary.today}</strong>
+                    <span className="text-[9px] text-white/50 block mt-0.5">kunjungan</span>
                   </div>
-                  <div className="w-9 h-9 bg-navy/5 text-navy rounded-lg flex items-center justify-center font-bold text-xs">T</div>
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                    <CalendarDays className="w-5 h-5" />
+                  </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-bordergray flex items-center justify-between shadow-sm">
+                {/* Minggu Ini */}
+                <div className="bg-gradient-to-br from-sky-500 to-sky-700 p-5 rounded-xl flex items-center justify-between shadow text-white">
                   <div>
-                    <span className="text-[10px] text-textsec font-bold block">Minggu Ini</span>
-                    <strong className="text-2xl font-extrabold text-navy">{dashSummary.week}</strong>
+                    <span className="text-[10px] text-white/60 font-bold block">Minggu Ini</span>
+                    <strong className="text-2xl font-extrabold">{dashSummary.week}</strong>
+                    <span className="text-[9px] text-white/50 block mt-0.5">kunjungan</span>
                   </div>
-                  <div className="w-9 h-9 bg-navy/5 text-navy rounded-lg flex items-center justify-center font-bold text-xs">W</div>
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                    <CalendarRange className="w-5 h-5" />
+                  </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-bordergray flex items-center justify-between shadow-sm">
+                {/* Bulan Ini */}
+                <div className="bg-gradient-to-br from-violet-500 to-violet-700 p-5 rounded-xl flex items-center justify-between shadow text-white">
                   <div>
-                    <span className="text-[10px] text-textsec font-bold block">Bulan Ini</span>
-                    <strong className="text-2xl font-extrabold text-navy">{dashSummary.month}</strong>
+                    <span className="text-[10px] text-white/60 font-bold block">Bulan Ini</span>
+                    <strong className="text-2xl font-extrabold">{dashSummary.month}</strong>
+                    <span className="text-[9px] text-white/50 block mt-0.5">kunjungan</span>
                   </div>
-                  <div className="w-9 h-9 bg-navy/5 text-navy rounded-lg flex items-center justify-center font-bold text-xs">M</div>
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                    <Calendar className="w-5 h-5" />
+                  </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-bordergray flex items-center justify-between shadow-sm">
+                {/* Tahun Ini */}
+                <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 rounded-xl flex items-center justify-between shadow text-white">
                   <div>
-                    <span className="text-[10px] text-textsec font-bold block">Tahun Ini</span>
-                    <strong className="text-2xl font-extrabold text-navy">{dashSummary.year}</strong>
+                    <span className="text-[10px] text-white/60 font-bold block">Tahun Ini</span>
+                    <strong className="text-2xl font-extrabold">{dashSummary.year}</strong>
+                    <span className="text-[9px] text-white/50 block mt-0.5">kunjungan</span>
                   </div>
-                  <div className="w-9 h-9 bg-navy/5 text-navy rounded-lg flex items-center justify-center font-bold text-xs">Y</div>
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
                 </div>
               </div>
 
@@ -1355,6 +1590,152 @@ export default function AdminPortal() {
             </div>
           )}
 
+          {/* ==================== PANEL: MASTER DATA SISWA ==================== */}
+          {activeMenu === 'students' && (
+            <div className="space-y-5 mt-6 fade-in">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <span className="text-xs font-bold text-textsec uppercase">Daftar Siswa (Master Data)</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleSyncStudents}
+                    disabled={syncingStudents}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition flex items-center space-x-1"
+                    title="Sinkronisasi seluruh data siswa dari API Bank Data"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingStudents ? 'animate-spin' : ''}`} />
+                    <span>{syncingStudents ? 'Menyinkronkan...' : 'Sinkronisasi API'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleDeleteAllStudents}
+                    disabled={syncingStudents}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition flex items-center space-x-1"
+                    title="Kosongkan seluruh data siswa dari database lokal"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Kosongkan Data</span>
+                  </button>
+
+                  <button
+                    onClick={() => openModal('students', 'create')}
+                    className="px-3.5 py-1.5 bg-navy hover:bg-navy-secondary text-white text-[10px] font-bold rounded-lg flex items-center space-x-1 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="bg-white p-4 rounded-xl border border-bordergray shadow-sm">
+                <input
+                  type="text"
+                  placeholder="Cari nama, NIS, NISN, atau kelas..."
+                  value={studentsFilter.search}
+                  onChange={(e) => setStudentsFilter({ search: e.target.value })}
+                  className="w-full px-3 py-2 border border-bordergray rounded-lg text-xs outline-none focus:border-navy"
+                />
+              </div>
+
+              <div className="bg-white rounded-xl border border-bordergray shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-bordergray text-navy font-bold uppercase">
+                        <th className="p-3">Nama Siswa</th>
+                        <th className="p-3">NIS / NISN</th>
+                        <th className="p-3">Kelas / Jurusan</th>
+                        <th className="p-3">JK</th>
+                        <th className="p-3">Agama</th>
+                        <th className="p-3">Tempat, Tgl Lahir</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedStudents.length > 0 ? (
+                        paginatedStudents.map((stud, index) => (
+                          <tr key={stud.id} className={`border-b border-bordergray hover:bg-slate-50 font-semibold ${
+                            index % 2 === 1 ? 'bg-slate-50/10' : ''
+                          }`}>
+                            <td className="p-3 text-navy font-bold text-sm">
+                              {stud.fullName}
+                            </td>
+                            <td className="p-3 text-textsec">
+                              <div>NIS: {stud.nis}</div>
+                              <div className="text-[10px]">NISN: {stud.nisn || '-'}</div>
+                            </td>
+                            <td className="p-3 text-navy font-bold">
+                              <div>{stud.className}</div>
+                              {stud.major && <span className="text-[9px] text-textsec bg-slate-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">{stud.major}</span>}
+                            </td>
+                            <td className="p-3 text-textsec">{stud.gender || '-'}</td>
+                            <td className="p-3 text-textsec">{stud.religion || '-'}</td>
+                            <td className="p-3 text-textsec">
+                              {stud.birthPlace || stud.birthDate ? (
+                                `${stud.birthPlace || ''}${stud.birthPlace && stud.birthDate ? ', ' : ''}${stud.birthDate || ''}`
+                              ) : '-'}
+                            </td>
+                            <td className="p-3">
+                              {stud.isActive ? (
+                                <span className="text-emerald-600 flex items-center space-x-1 text-xs">
+                                  <CheckCircle className="w-3.5 h-3.5" /> <span>Aktif</span>
+                                </span>
+                              ) : (
+                                <span className="text-rose-500 flex items-center space-x-1 text-xs">
+                                  <XCircle className="w-3.5 h-3.5" /> <span>Nonaktif</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right space-x-2">
+                              <button
+                                onClick={() => openModal('students', 'edit', stud)}
+                                className="p-1.5 text-navy hover:bg-slate-100 rounded-lg transition"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete('students', stud.id)}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="8" className="text-center py-8 text-textsec font-semibold">Tidak ada data siswa ditemukan.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {totalStudentsPages > 1 && (
+                  <div className="flex justify-between items-center px-4 py-3 bg-white border-t border-bordergray text-xs font-bold text-navy">
+                    <button
+                      onClick={() => setStudentsPage(p => Math.max(p - 1, 1))}
+                      disabled={studentsPage === 1}
+                      className="px-3 py-1.5 border border-bordergray rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition"
+                    >
+                      Sebelumnya
+                    </button>
+                    <span className="text-textsec">
+                      Halaman {studentsPage} dari {totalStudentsPages} ({students.length} Total)
+                    </span>
+                    <button
+                      onClick={() => setStudentsPage(p => Math.min(p + 1, totalStudentsPages))}
+                      disabled={studentsPage === totalStudentsPages}
+                      className="px-3 py-1.5 border border-bordergray rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition"
+                    >
+                      Selanjutnya
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ==================== 5. PANEL: MASTER JENIS KUNJUNGAN ==================== */}
           {activeMenu === 'visitorTypes' && (
             <div className="space-y-5 mt-6 fade-in">
@@ -1423,7 +1804,10 @@ export default function AdminPortal() {
           {activeMenu === 'purposes' && (
             <div className="space-y-5 mt-6 fade-in">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-textsec uppercase">Daftar Keperluan</span>
+                <div>
+                  <span className="text-xs font-bold text-textsec uppercase">Daftar Keperluan Tamu</span>
+                  <p className="text-[10px] text-textsec mt-0.5">Dikelompokkan berdasarkan kategori tamu</p>
+                </div>
                 <button
                   onClick={() => openModal('purposes', 'create')}
                   className="px-3.5 py-2 bg-navy hover:bg-navy-secondary text-white text-xs font-bold rounded-lg flex items-center space-x-1 transition"
@@ -1433,55 +1817,92 @@ export default function AdminPortal() {
                 </button>
               </div>
 
-              <div className="bg-white rounded-xl border border-bordergray shadow-sm overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-bordergray text-navy font-bold uppercase">
-                      <th className="p-3">Kategori Tamu</th>
-                      <th className="p-3">Nama Keperluan</th>
-                      <th className="p-3">Urutan</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {purposes.map((p, index) => (
-                      <tr key={p.id} className={`border-b border-bordergray hover:bg-slate-50 font-semibold ${
-                        index % 2 === 1 ? 'bg-slate-50/10' : ''
-                      }`}>
-                        <td className="p-3 text-textsec font-bold">{p.visitorType.name}</td>
-                        <td className="p-3 text-navy font-bold text-sm">{p.name}</td>
-                        <td className="p-3 text-textsec">{p.sortOrder}</td>
-                        <td className="p-3">
-                          {p.isActive ? (
-                            <span className="text-emerald-600 flex items-center space-x-1 text-xs">
-                              <CheckCircle className="w-3.5 h-3.5" /> <span>Aktif</span>
-                            </span>
-                          ) : (
-                            <span className="text-rose-500 flex items-center space-x-1 text-xs">
-                              <XCircle className="w-3.5 h-3.5" /> <span>Nonaktif</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right space-x-2">
-                          <button
-                            onClick={() => openModal('purposes', 'edit', p)}
-                            className="p-1.5 text-navy hover:bg-slate-100 rounded-lg transition"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete('purposes', p.id)}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {/* Group purposes by visitorType */}
+              {(() => {
+                const grouped = purposes.reduce((acc, p) => {
+                  const key = p.visitorType?.name || 'Tidak Berkategori';
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(p);
+                  return acc;
+                }, {});
+
+                const groupColors = [
+                  'from-navy to-navy-secondary',
+                  'from-sky-500 to-sky-700',
+                  'from-violet-500 to-violet-700',
+                  'from-amber-500 to-amber-600',
+                  'from-emerald-500 to-emerald-700',
+                  'from-rose-500 to-rose-700',
+                ];
+
+                return Object.entries(grouped).map(([typeName, items], groupIdx) => (
+                  <div key={typeName} className="bg-white rounded-xl border border-bordergray shadow-sm overflow-hidden">
+                    {/* Group Header */}
+                    <div className={`bg-gradient-to-r ${groupColors[groupIdx % groupColors.length]} px-4 py-3 flex items-center justify-between`}>
+                      <div className="flex items-center space-x-2">
+                        <UserCheck className="w-4 h-4 text-white/80" />
+                        <span className="text-white font-extrabold text-xs tracking-wide">{typeName}</span>
+                        <span className="bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                          {items.length} keperluan
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Items Table */}
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-bordergray text-navy font-bold uppercase text-[10px]">
+                          <th className="p-3">Nama Keperluan</th>
+                          <th className="p-3 w-24">Urutan</th>
+                          <th className="p-3 w-28">Status</th>
+                          <th className="p-3 text-right w-24">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((p, index) => (
+                          <tr key={p.id} className={`border-b border-bordergray hover:bg-slate-50/70 font-semibold transition ${
+                            index % 2 === 1 ? 'bg-slate-50/30' : ''
+                          }`}>
+                            <td className="p-3 text-navy font-bold">{p.name}</td>
+                            <td className="p-3 text-textsec">{p.sortOrder}</td>
+                            <td className="p-3">
+                              {p.isActive ? (
+                                <span className="text-emerald-600 flex items-center space-x-1 text-xs">
+                                  <CheckCircle className="w-3.5 h-3.5" /> <span>Aktif</span>
+                                </span>
+                              ) : (
+                                <span className="text-rose-500 flex items-center space-x-1 text-xs">
+                                  <XCircle className="w-3.5 h-3.5" /> <span>Nonaktif</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right space-x-2">
+                              <button
+                                onClick={() => openModal('purposes', 'edit', p)}
+                                className="p-1.5 text-navy hover:bg-slate-100 rounded-lg transition"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete('purposes', p.id)}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ));
+              })()}
+
+              {purposes.length === 0 && (
+                <div className="text-center py-10 bg-white rounded-xl border border-dashed border-bordergray">
+                  <p className="text-textsec text-xs font-semibold">Belum ada data keperluan tamu.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1977,6 +2398,115 @@ export default function AdminPortal() {
                     <label htmlFor="user-active">Aktif</label>
                   </div>
                 </>
+              )}
+
+              {/* --- STUDENT FORM --- */}
+              {showModal === 'students' && (
+                <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
+                  <div className="space-y-1">
+                    <label>Nama Lengkap Siswa *</label>
+                    <input
+                      type="text"
+                      value={studentForm.fullName}
+                      onChange={(e) => setStudentForm(p => ({ ...p, fullName: e.target.value }))}
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label>NIS *</label>
+                    <input
+                      type="text"
+                      value={studentForm.nis}
+                      onChange={(e) => setStudentForm(p => ({ ...p, nis: e.target.value }))}
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label>NISN</label>
+                    <input
+                      type="text"
+                      value={studentForm.nisn}
+                      onChange={(e) => setStudentForm(p => ({ ...p, nisn: e.target.value }))}
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label>Kelas *</label>
+                    <input
+                      type="text"
+                      value={studentForm.className}
+                      onChange={(e) => setStudentForm(p => ({ ...p, className: e.target.value }))}
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                      placeholder="e.g. X PPLG 1"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label>Kompetensi Keahlian / Jurusan</label>
+                    <input
+                      type="text"
+                      value={studentForm.major}
+                      onChange={(e) => setStudentForm(p => ({ ...p, major: e.target.value }))}
+                      className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                      placeholder="e.g. PPLG"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label>Jenis Kelamin</label>
+                      <select
+                        value={studentForm.gender}
+                        onChange={(e) => setStudentForm(p => ({ ...p, gender: e.target.value }))}
+                        className="w-full border border-bordergray px-3 py-2 rounded-lg bg-white text-xs"
+                      >
+                        <option value="L">Laki-laki</option>
+                        <option value="P">Perempuan</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label>Agama</label>
+                      <input
+                        type="text"
+                        value={studentForm.religion}
+                        onChange={(e) => setStudentForm(p => ({ ...p, religion: e.target.value }))}
+                        className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                        placeholder="e.g. Islam"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label>Tempat Lahir</label>
+                      <input
+                        type="text"
+                        value={studentForm.birthPlace}
+                        onChange={(e) => setStudentForm(p => ({ ...p, birthPlace: e.target.value }))}
+                        className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label>Tanggal Lahir</label>
+                      <input
+                        type="text"
+                        value={studentForm.birthDate}
+                        onChange={(e) => setStudentForm(p => ({ ...p, birthDate: e.target.value }))}
+                        className="w-full border border-bordergray px-3 py-2 rounded-lg text-xs"
+                        placeholder="YYYY-MM-DD"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="student-active"
+                      checked={studentForm.isActive}
+                      onChange={(e) => setStudentForm(p => ({ ...p, isActive: e.target.checked }))}
+                    />
+                    <label htmlFor="student-active">Aktif</label>
+                  </div>
+                </div>
               )}
 
               <div className="flex justify-end space-x-2 pt-3 border-t">

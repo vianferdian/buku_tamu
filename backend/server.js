@@ -25,6 +25,7 @@ const visitRoutes = require('./routes/visits');
 const settingRoutes = require('./routes/settings');
 const userRoutes = require('./routes/users');
 const reportRoutes = require('./routes/reports');
+const studentRoutes = require('./routes/students');
 
 // Register Routes
 app.use('/api/auth', authRoutes);
@@ -36,6 +37,7 @@ app.use('/api/visits', visitRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/students', studentRoutes);
 
 // Base Route
 app.get('/', (req, res) => {
