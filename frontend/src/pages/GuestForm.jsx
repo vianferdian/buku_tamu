@@ -287,7 +287,9 @@ export default function GuestForm() {
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  {visitorTypes.map(vt => (
+                  {visitorTypes
+                    .filter(vt => !vt.name.toLowerCase().includes('paket') && !vt.name.toLowerCase().includes('makanan'))
+                    .map(vt => (
                     <button
                       key={vt.id}
                       type="button"
