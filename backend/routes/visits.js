@@ -274,17 +274,27 @@ router.patch('/:id/contact', verifyToken, isSecurityOrAdmin, async (req, res) =>
       where: { key: 'whatsapp_template' }
     });
 
-    const templateText = templateSetting
-      ? templateSetting.value
-      : 'Selamat {waktu} Bapak/Ibu {nama_pegawai}.\n\nAda tamu yang ingin menemui Bapak/Ibu.\n\nNama: {nama_tamu}\nInstansi: {instansi}\nJenis Kunjungan: {jenis_kunjungan}\nKeperluan: {keperluan}\n\nTamu saat ini sudah berada di pos security SMK Negeri 1 Cirebon.\n\nTerima kasih.';
+    let templateText = templateSetting ? templateSetting.value : null;
 
-    // Compile variables
     const greeting = getGreeting();
     const instansiVal = visit.institutionName || '-';
     const jamVal = formatTime(visit.visitedAt);
     const keperluanFull = visit.purposeDescription
       ? `${visit.purpose.name} (${visit.purposeDescription})`
       : visit.purpose.name;
+
+    const isDelivery = 
+      visit.visitorType.name.toLowerCase().includes('paket') || 
+      visit.visitorType.name.toLowerCase().includes('makanan') ||
+      (visit.purposeDescription && (visit.purposeDescription.includes('[PAKET') || visit.purposeDescription.includes('[PESANAN MAKANAN')));
+
+    if (!templateText) {
+      if (isDelivery) {
+        templateText = 'Selamat {waktu} Bapak/Ibu {nama_pegawai}.\n\nAda Paket / Pesanan Makanan atas nama Bapak/Ibu yang telah tiba di Pos Satpam SMK Negeri 1 Cirebon.\n\n- Nama Pengirim/Kurir: {nama_tamu}\n- Ekspedisi/Layanan: {instansi}\n- Detail: {keperluan}\n- Lokasi: Pos Satpam (Sudah bisa diambil di Pos Satpam).\n\nTerima kasih.';
+      } else {
+        templateText = 'Selamat {waktu} Bapak/Ibu {nama_pegawai}.\n\nAda tamu yang ingin menemui Bapak/Ibu.\n\nNama: {nama_tamu}\nInstansi: {instansi}\nJenis Kunjungan: {jenis_kunjungan}\nKeperluan: {keperluan}\n\nTamu saat ini sudah berada di pos security SMK Negeri 1 Cirebon.\n\nTerima kasih.';
+      }
+    }
 
     const compiledMessage = templateText
       .replace(/{waktu}/g, greeting)

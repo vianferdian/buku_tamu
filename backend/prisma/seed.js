@@ -96,6 +96,16 @@ async function main() {
       ]
     },
     {
+      name: 'Pengiriman Paket & Makanan Online',
+      sortOrder: 4,
+      purposes: [
+        'Titip Paket di Pos Satpam',
+        'Titip Pesanan Makanan Online',
+        'Pengiriman Dokumen / Barang',
+        'Lainnya'
+      ]
+    },
+    {
       name: 'Media',
       sortOrder: 4,
       purposes: [

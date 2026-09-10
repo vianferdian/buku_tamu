@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import GuestLanding from './pages/GuestLanding';
 import GuestForm from './pages/GuestForm';
+import DeliveryForm from './pages/DeliveryForm';
 import Login from './pages/Login';
 import SecurityPortal from './pages/SecurityPortal';
 import AdminPortal from './pages/AdminPortal';
@@ -31,6 +32,7 @@ function App() {
         {/* Kiosk Guest Pages (Public) */}
         <Route path="/" element={<GuestLanding />} />
         <Route path="/form" element={<GuestForm />} />
+        <Route path="/delivery" element={<DeliveryForm />} />
         
         {/* Secure Login */}
         <Route path="/login" element={<Login />} />
