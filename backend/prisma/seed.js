@@ -49,16 +49,21 @@ async function main() {
 
   const departments = [];
   for (const dep of departmentsData) {
-    const d = await prisma.department.create({
-      data: {
-        name: dep.name,
-        sortOrder: dep.sortOrder,
-        isActive: true
-      }
+    let d = await prisma.department.findFirst({
+      where: { name: dep.name }
     });
+    if (!d) {
+      d = await prisma.department.create({
+        data: {
+          name: dep.name,
+          sortOrder: dep.sortOrder,
+          isActive: true
+        }
+      });
+    }
     departments.push(d);
   }
-  console.log(`${departments.length} Bagian/Unit berhasil dibuat.`);
+  console.log(`${departments.length} Bagian/Unit diproses.`);
 
   // 3. Create Visitor Types and Purposes
   const visitorTypesData = [
@@ -107,7 +112,7 @@ async function main() {
     },
     {
       name: 'Media',
-      sortOrder: 4,
+      sortOrder: 5,
       purposes: [
         'Liputan',
         'Wawancara',
@@ -117,7 +122,7 @@ async function main() {
     },
     {
       name: 'Umum',
-      sortOrder: 5,
+      sortOrder: 6,
       purposes: [
         'Kunjungan Dinas',
         'Konsultasi Umum',
@@ -127,26 +132,36 @@ async function main() {
   ];
 
   for (const vt of visitorTypesData) {
-    const createdType = await prisma.visitorType.create({
-      data: {
-        name: vt.name,
-        sortOrder: vt.sortOrder,
-        isActive: true
-      }
+    let createdType = await prisma.visitorType.findFirst({
+      where: { name: vt.name }
     });
-
-    for (let i = 0; i < vt.purposes.length; i++) {
-      await prisma.visitPurpose.create({
+    if (!createdType) {
+      createdType = await prisma.visitorType.create({
         data: {
-          visitorTypeId: createdType.id,
-          name: vt.purposes[i],
-          sortOrder: i + 1,
+          name: vt.name,
+          sortOrder: vt.sortOrder,
           isActive: true
         }
       });
     }
+
+    for (let i = 0; i < vt.purposes.length; i++) {
+      const existingPurpose = await prisma.visitPurpose.findFirst({
+        where: { visitorTypeId: createdType.id, name: vt.purposes[i] }
+      });
+      if (!existingPurpose) {
+        await prisma.visitPurpose.create({
+          data: {
+            visitorTypeId: createdType.id,
+            name: vt.purposes[i],
+            sortOrder: i + 1,
+            isActive: true
+          }
+        });
+      }
+    }
   }
-  console.log('Kategori Tamu & Keperluan berhasil dibuat.');
+  console.log('Kategori Tamu & Keperluan diproses.');
 
   // 4. Create Default Employees
   const depMap = {};
@@ -198,33 +213,41 @@ async function main() {
   ];
 
   for (const emp of employeesData) {
-    await prisma.employee.create({
-      data: {
-        name: emp.name,
-        nip: emp.nip,
-        position: emp.position,
-        departmentId: emp.departmentId,
-        expertise: emp.expertise,
-        phone: emp.phone,
-        email: emp.email,
-        sortOrder: emp.sortOrder,
-        isActive: true
-      }
-    });
-  }
-  console.log('Sample data Pegawai berhasil dibuat.');
+    const existingEmp = emp.nip
+      ? await prisma.employee.findFirst({ where: { nip: emp.nip } })
+      : await prisma.employee.findFirst({ where: { name: emp.name } });
 
-  // 5. Create Default Settings
+    if (!existingEmp) {
+      await prisma.employee.create({
+        data: {
+          name: emp.name,
+          nip: emp.nip,
+          position: emp.position,
+          departmentId: emp.departmentId,
+          expertise: emp.expertise,
+          phone: emp.phone,
+          email: emp.email,
+          sortOrder: emp.sortOrder,
+          isActive: true
+        }
+      });
+    }
+  }
+  console.log('Sample data Pegawai diproses.');
+
+  // 5. Create Default Settings (Upsert to prevent P2002 unique constraint error)
   const defaultTemplate = 'Selamat {waktu} Bapak/Ibu {nama_pegawai}.\n\nAda tamu yang ingin menemui Bapak/Ibu.\n\nNama: {nama_tamu}\nInstansi: {instansi}\nJenis Kunjungan: {jenis_kunjungan}\nKeperluan: {keperluan}\n\nTamu saat ini sudah berada di pos security SMK Negeri 1 Cirebon.\n\nTerima kasih.';
   
-  await prisma.setting.create({
-    data: {
+  await prisma.setting.upsert({
+    where: { key: 'whatsapp_template' },
+    update: {},
+    create: {
       key: 'whatsapp_template',
       value: defaultTemplate
     }
   });
 
-  console.log('Default settings berhasil dibuat.');
+  console.log('Default settings diproses.');
   console.log('Seeding selesai sukses!');
 }
 
